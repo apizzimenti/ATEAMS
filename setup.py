@@ -1,7 +1,9 @@
 
 from setuptools import setup, Extension
+from distutils import sysconfig
 from Cython.Build import cythonize
 import os
+import subprocess
 import numpy
 
 #########################
@@ -20,19 +22,45 @@ import numpy
 #
 # To ensure installation.
 
-if not "CC" in os.environ: os.environ["CC"] = "gcc-14"
-if not "CXX" in os.environ: os.environ["CXX"] = "g++-14"
+os.environ["CC"] = "clang++"
+os.environ["CXX"] = "clang++"
+os.environ['LDSHARED'] = 'clang -shared'
 
 extensions = [
 	Extension(
 		"*",
-		["ateams/**/*.pyx"],
+		["ateams/arithmetic/matrices.pyx", "ateams/arithmetic/fastcomputation.cpp"],
+		include_dirs=[
+			"/usr/local/include/givaro/include",
+			"/usr/local/include/gmp/include",
+			"/usr/local/include/linbox/include",
+			"/usr/local/include/fflas-ffpack/include"
+		],
+		library_dirs=[
+			"/usr/local/include/givaro/lib",
+			"/usr/local/include/gmp/lib",
+			"/usr/local/include/linbox/lib",
+			"/usr/local/include/fflas-ffpack/lib"	
+		],
+		extra_compile_args=["-std=c++11"],
+		language="c++"
+	),
+	Extension(
+		"*",
+		[
+			"ateams/arithmetic/linearAlgebra.pyx",
+			"ateams/arithmetic/persistence.pyx",
+			"ateams/arithmetic/cubicalComplex.pyx"
+		],
 		include_dirs=[numpy.get_include()],
-		extra_compile_args=["-O4"], # just C
-		# extra_compile_args=["-std=c++20", "-O3"] # C++
+		language="c"
 	)
 ]
 
 setup(
-    ext_modules=cythonize(extensions, annotate=True, language_level="3")
+    ext_modules=cythonize(
+		extensions,
+		annotate=True,
+		language_level="3"
+	)
 )
