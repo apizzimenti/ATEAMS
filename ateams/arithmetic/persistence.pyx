@@ -1,7 +1,6 @@
 
 # cython: language_level=3str, initializedcheck=False, c_api_binop_methods=True, nonecheck=False, profile=True, cdivision=True, wraparound=False, boundscheck=False
 # define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-# distutils: language=C
 
 import numpy as np
 cimport numpy as np
