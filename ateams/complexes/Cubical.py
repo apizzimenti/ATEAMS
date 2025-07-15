@@ -7,7 +7,7 @@ from itertools import combinations as combs, product
 from math import comb
 
 from ..common import MINT, Matrices
-from .construction import boundaryMatrices, fullBoundaryMatrix
+from .Cubical import boundaryMatrices, fullBoundaryMatrix
 
 
 class Matrices:
