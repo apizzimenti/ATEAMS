@@ -138,6 +138,7 @@ cdef class Persistence:
 		self.columnEntries = Vector[OrderedSet[int]](self.cellCount);
 		self.columnEntriesIterable = Vector[Vector[int]](self.cellCount);
 		self.columnEntriesCoefficients = Vector[Map[int,FFINT]](self.cellCount);
+		self.linearCombinations = Vector[Map[int,FFINT]](self.cellCount);
 
 		self.__flushDataStructures();
 
@@ -182,6 +183,7 @@ cdef class Persistence:
 		self.columnEntries = Vector[OrderedSet[int]](self.cellCount);
 		self.columnEntriesIterable = Vector[Vector[int]](self.cellCount);
 		self.columnEntriesCoefficients = Vector[Map[int,FFINT]](self.cellCount);
+		self.linearCombinations = Vector[Map[int,FFINT]](self.cellCount);
 
 		self.marked = Set[int]();
 		if premark: self.marked.insert(self.premarked.begin(), self.premarked.end());
@@ -516,7 +518,7 @@ cdef class Persistence:
 
 				if (i%2) < 1: faceCoefficients[face] = self.negation[1];
 				else: faceCoefficients[face] = self.negation[self.characteristic-1];
-		
+
 		return faces;
 
 	
@@ -564,7 +566,7 @@ cdef class Persistence:
 			A `set` of times at which homological percolation occurs.
 		"""
 		# Flush the set of marked indices, adding premarked ones.
-		self.__flushDataStructures();
+		self.__flushDataStructures(premark=False);
 		cdef OrderedSet[int] events = OrderedSet[int]();
 
 		# Construct the boundary matrix for this filtration; variables for
@@ -578,7 +580,7 @@ cdef class Persistence:
 		# TODO: shouldn't have to iterate over vertices
 		tagged = 0;
 
-		for t in range(self.vertexCount, self.higherCellCount):
+		for t in range(0, self.cellCount):
 			# Since our filtrations are discrete (i.e. we add exactly one simplex
 			# at each time-step), the "degree" of the cell is the same as the time
 			# at which it was added.
@@ -599,9 +601,9 @@ cdef class Persistence:
 				self.marked.insert(cell);
 				degree[cell] = t;
 				
-				if self._dimensions[cell] == self.homology:
-					self.markedIterable[tagged] = cell;
-					tagged = tagged + 1;
+				# if self._dimensions[cell] == self.homology:
+				self.markedIterable[tagged] = cell;
+				tagged = tagged + 1;
 
 			# Otherwise, store the row in the appropriate locations.
 			else:
@@ -626,7 +628,7 @@ cdef class Persistence:
 		return events
 
 
-	cdef OrderedSet[int] TwistEliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept:
+	cdef OrderedSet[int] TwistEliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients, Map[int,FFINT] &columnsReduced) noexcept:
 		"""
 		Performs Gaussian elimination on the row specified by `faceCoefficients`
 		and the row with a pivot in column `youngest`.
@@ -651,6 +653,7 @@ cdef class Persistence:
 		# Get the coefficient of the pivot entry, then eliminate the row.
 		_q = self.columnEntriesCoefficients[nextAdded][youngest];
 		inverse = self.inverse[_q];
+		columnsReduced[nextAdded] = self.negation[inverse];
 
 		entriesIterable = self.columnEntriesIterable[nextAdded];
 		N = entriesIterable.size();
@@ -719,10 +722,14 @@ cdef class Persistence:
 			of the pivot column.
 		"""
 		cdef OrderedSet[int] youngestColumnEntries;
+		cdef Map[int,FFINT] columnsReduced = Map[int,FFINT]();
 		cdef int youngest;
 		cdef FFINT _q, q;
 
 		faces = self.TwistBuildFace(cell, faces, faceCoefficients);
+
+		# Record the linear combinations required to reduce the column (if it's
+		# not a pivot column).
 
 		while not faces.empty() and self.nextColumnAdded[self.youngestOf(faces)] != 0:
 			# Get the face of `cell` of maximum degree (i.e. the one added latest
@@ -730,8 +737,10 @@ cdef class Persistence:
 			youngest = self.youngestOf(faces);
 
 			# Otherwise, eliminate.
-			faces = self.TwistEliminate(youngest, faces, faceCoefficients);
+			faces = self.TwistEliminate(youngest, faces, faceCoefficients, columnsReduced);
 		
+		self.linearCombinations[cell] = columnsReduced;
+
 		return faces;
 
 
@@ -811,8 +820,30 @@ cdef class Persistence:
 			cell = self.markedIterable[j];
 
 			if self.nextColumnAdded[cell] == 0: events.insert(cell);
-		
+
 		return events
+
+
+	cpdef Map[int,Map[int,FFINT]] TwistBasis(self, INDEXFLAT filtration) noexcept:
+		"""
+		Reports the linear combinations corresponding to basis elements of the `homology`th
+		homology group.
+
+		Args:
+			filtration (np.array): Order in which cells are added.
+
+		Returns:
+			A `set` of times at which homological percolation occurs.
+		"""
+		cdef OrderedSet[int] events = self.TwistComputePercolationEvents(filtration);
+		cdef Map[int,Map[int,FFINT]] basis = Map[int,Map[int,FFINT]]();
+		
+		for e in events:
+			basis[e] = self.linearCombinations[e];
+
+		return basis;
+		
+
 
 	
 	cpdef OrderedSet[int] ComputeGiantCycles(self, INDEXFLAT filtration) noexcept:
@@ -841,7 +872,7 @@ cdef class Persistence:
 		# TODO: shouldn't have to iterate over vertices
 		tagged = 0;
 
-		for t in range(0, self.cellCount):
+		for t in range(0, self.cellCOunt):
 			# Since our filtrations are discrete (i.e. we add exactly one simplex
 			# at each time-step), the "degree" of the cell is the same as the time
 			# at which it was added.

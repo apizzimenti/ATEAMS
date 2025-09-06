@@ -41,6 +41,7 @@ cdef class Persistence:
 	cdef Vector[OrderedSet[int]] columnEntries
 	cdef Vector[Vector[int]] columnEntriesIterable
 	cdef Vector[Map[int,FFINT]] columnEntriesCoefficients
+	cdef Vector[Map[int,FFINT]] linearCombinations
 
 	cdef Vector[Vector[int]] boundary
 	cdef Vector[Vector[int]] _boundary
@@ -61,9 +62,10 @@ cdef class Persistence:
 	cdef OrderedSet[int] RemoveUnmarkedCells(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
 	cdef OrderedSet[int] TwistBuildFace(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
 	cdef OrderedSet[int] Eliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
-	cdef OrderedSet[int] TwistEliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
+	cdef OrderedSet[int] TwistEliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients, Map[int,FFINT] &columnsReduced) noexcept
 	cdef OrderedSet[int] ReducePivotRow(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
 	cdef OrderedSet[int] TwistReducePivotRow(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
+	cpdef Map[int,Map[int,FFINT]] TwistBasis(self, INDEXFLAT filtration) noexcept
 	cpdef OrderedSet[int] ComputePercolationEvents(self, INDEXFLAT filtration) noexcept
 	cpdef OrderedSet[int] TwistComputePercolationEvents(self, INDEXFLAT filtration) noexcept
 	cpdef OrderedSet[int] ComputeGiantCycles(self, INDEXFLAT filtration) noexcept
