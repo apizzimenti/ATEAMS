@@ -16,16 +16,19 @@ build: clean PHATMethods LinBoxMethods
 	@python setup.py build_ext --inplace > build.log 2>&1 
 
 
-PHATMethods:
+PHATMethods: common
 	@sudo cp -r ateams/arithmetic/include/PHAT /usr/local/include/phat
 	@sudo clang++ -shared -fPIC -std=c++17 -o /usr/local/lib/libPHATMethods.so ateams/arithmetic/PHATMethods.cpp -v -O3
 	@sudo cp -r ateams/arithmetic/PHATMethods.h /usr/local/include/ATEAMS/
 
 
-LinBoxMethods:
-	@sudo clang++ `pkg-config --libs linbox` -shared -fPIC -std=c++17 -o /usr/local/lib/libLinBoxMethods.so ateams/arithmetic/LinBoxMethods.cpp -v -O3
+LinBoxMethods: common
 	@sudo cp -r ateams/arithmetic/LinBoxMethods.h /usr/local/include/ATEAMS/
+	@sudo clang++ `pkg-config --libs linbox` -shared -fPIC -std=c++17 -o /usr/local/lib/libLinBoxMethods.so ateams/arithmetic/LinBoxMethods.cpp -v -O3
 
+
+common:
+	@sudo cp -r ateams/common.h /usr/local/include/ATEAMS/
 
 
 
