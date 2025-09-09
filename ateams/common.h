@@ -26,10 +26,11 @@ typedef vector<Index> PersistencePairs;
 
 // Matrices.
 typedef map<INDEXTYPE,DATATYPE> Column;
-typedef map<INDEXTYPE,Column> SparseLinearCombination;
 typedef vector<Column> BoundaryMatrix;
 typedef vector<Index> FlatBoundaryMatrix;
 
+typedef vector<Column> Basis;
+typedef vector<Basis> Bases;
 
 // Helper method for printing `map`s.'
 template <typename MapStorage>

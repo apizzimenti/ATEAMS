@@ -2,12 +2,12 @@
 # distutils: language=c++
 
 from ..common cimport (
-	INDEXFLAT, Vectorize, DATATYPE, BoundaryMatrix, Column, Map
+	INDEXFLAT, Vectorize, DATATYPE, BoundaryMatrix, Column, Map, Basis, Bases
 )
 
 from .LinBoxMethods cimport (
 	ComputePercolationEvents, ZpComputePercolationEvents,
-	LinearComputePercolationEvents, LinearComputeBasis
+	LinearComputePercolationEvents, LinearComputeBases
 )
 
 from libc.math cimport pow
@@ -73,6 +73,7 @@ cdef class Twist:
 		self.fullBoundary = Vectorize(boundary);
 		self.referenceBoundary = self.FillBoundaryMatrix(boundary);
 		self.workingBoundary = BoundaryMatrix(self.referenceBoundary);
+		self.bases = Bases(self.breaks.size());
 
 		# Construct arithmetic operations.
 		self.__arithmetic();
@@ -195,6 +196,7 @@ cdef class Twist:
 			self.workingBoundary, self.breaks, self.cellCount
 		);
 
+
 	cpdef Set LinearComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
 		"""
 		Given a filtration --- i.e. a reordering of the columns of the full
@@ -215,6 +217,7 @@ cdef class Twist:
 			self.workingBoundary, self.breaks, self.cellCount, self.dimension
 		);
 	
+
 	cpdef Set ZpComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
 		"""
 		Given a filtration --- i.e. a reordering of the columns of the full
@@ -234,25 +237,19 @@ cdef class Twist:
 		);
 
 
-	cpdef SparseLinearCombination LinearComputeBasis(self, INDEXFLAT filtration) noexcept:
+	cpdef Bases LinearComputeBases(self) noexcept:
 		"""
-		Given a filtration --- i.e. a reordering of the columns of the full
-		boundary matrix --- gives times at which essential cycles of dimension
-		`dimension` were created. Performs arithmetic using flattened addition
-		and multiplication tables stored in `vector<char>`s.
-
-		Args:
-			filtration (np.ndarray): An array of column indices.
+		Computes bases for the homology groups of the underlying space.
 
 		Returns:
-			A set containing indices at which essential cycles appear.
+			A `Bases` object (which is just a `std::vector` of `Basis` objects)
+			for the underlying space. Given the configuration of `LinearComputeBases`,
+			only bases for the top-level dimension down to `dimension-1` are given.
 		"""
-		self.workingBoundary = self.ReindexBoundaryMatrix(filtration);
-
-		cdef Set events = self.LinearComputePercolationEvents(filtration);
-		cdef SparseLinearCombination basis = SparseLinearCombination();
-
-		return LinearComputeBasis(
+		self.bases = LinearComputeBases(
 			self.characteristic, self.flatAddition, self.flatMultiplication, self.negation, self.inversion,
-			self.workingBoundary, self.breaks, self.cellCount, self.dimension
+			self.referenceBoundary, self.breaks, self.cellCount, self.dimension
 		);
+
+		return self.bases;
+

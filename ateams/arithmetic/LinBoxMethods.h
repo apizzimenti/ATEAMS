@@ -22,7 +22,7 @@ Set LinearComputePercolationEvents(
 );
 
 // Basis computers.
-SparseLinearCombination LinearComputeBasis(
+Bases LinearComputeBases(
 	int field, Lookup addition, Lookup multiplication, Lookup negation,
 	Lookup inversion, BoundaryMatrix Boundary, Index breaks, int cellCount,
 	int dimension

@@ -438,13 +438,14 @@ Set LinearComputePercolationEvents(
 }
 
 
-SparseLinearCombination LinearComputeBasis(
+Bases LinearComputeBases(
 		int field, Lookup addition, Lookup multiplication, Lookup negation, Lookup inversion,
 		BoundaryMatrix Boundary, Index breaks, int cellCount, int dimension
 	) {
 	Index nextColumnAdded = Index(cellCount, 0);
 	Column cell, youngest;
 	Set marked = Set();
+	Map dimensions = Map();
 	int face, high, numBreaks = breaks.size();
 
 	// Keep track of the linear combinations used to reduce each column; these
@@ -514,6 +515,7 @@ SparseLinearCombination LinearComputeBasis(
 				Boundary[youngestOf(cell)] = Column();
 			} else {
 				marked.insert(j);
+				dimensions[j] = d;
 			}
 
 			reducedColumns[j] = reduced;
@@ -523,13 +525,13 @@ SparseLinearCombination LinearComputeBasis(
 	// Find the essential birth times by checking whether the column is marked
 	// (i.e. is a cycle) and has no younger columns to add. (For some reason,
 	// 0 gets left out here. Not sure why...)
-	SparseLinearCombination basis = SparseLinearCombination();
+	Bases bases = Bases(numBreaks, Basis());
 
 	for (auto it = marked.begin(); it != marked.end(); it++) {
 		if (nextColumnAdded[*it] == 0) {
-			basis[*it] = reducedColumns[*it];
+			bases[dimensions[*it]].push_back(reducedColumns[*it]);
 		}
 	}
 
-	return basis;
+	return bases;
 }

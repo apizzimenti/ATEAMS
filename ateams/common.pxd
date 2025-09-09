@@ -37,6 +37,8 @@ ctypedef AnyVector[Lookup] Table;
 ctypedef AnyMap[INDEXTYPE,DATATYPE] Column;
 ctypedef AnyVector[Column] BoundaryMatrix;
 ctypedef AnyVector[Index] FlatBoundaryMatrix;
+ctypedef AnyVector[Column] Basis
+ctypedef AnyVector[Basis] Bases
 ctypedef AnyVector[Set] MatrixEntries;
 
 # Come up with better names for these.

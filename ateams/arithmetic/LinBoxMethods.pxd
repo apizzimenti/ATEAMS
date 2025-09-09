@@ -1,5 +1,5 @@
 
-from ..common cimport Table, Lookup, BoundaryMatrix, Index, Set, SparseLinearCombination
+from ..common cimport Table, Lookup, BoundaryMatrix, Index, Set, Bases
 
 cdef extern from "LinBoxMethods.h":
 	# Sample computers.
@@ -24,7 +24,7 @@ cdef extern from "LinBoxMethods.h":
 	) noexcept
 
 	# Basis computers.
-	SparseLinearCombination LinearComputeBasis(
+	Bases LinearComputeBases(
 		int field, Lookup addition, Lookup multiplication, Lookup negation,
 		Lookup inversion, BoundaryMatrix Boundary, Index breaks, int cellCount,
 		int dimension
