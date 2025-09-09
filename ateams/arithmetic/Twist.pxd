@@ -1,7 +1,7 @@
 
 # distutils: language=c++
 
-from ..common cimport INDEXFLAT, BoundaryMatrix, Index, Set, Table, Lookup
+from ..common cimport INDEXFLAT, BoundaryMatrix, Index, Set, Table, Lookup, SparseLinearCombination
 
 
 cdef class Twist:
@@ -19,3 +19,4 @@ cdef class Twist:
 	cpdef Set ComputePercolationEvents(self, INDEXFLAT filtration) noexcept
 	cpdef Set LinearComputePercolationEvents(self, INDEXFLAT filtration) noexcept
 	cpdef Set ZpComputePercolationEvents(self, INDEXFLAT filtration) noexcept
+	cpdef SparseLinearCombination LinearComputeBasis(self, INDEXFLAT filtration) noexcept

@@ -25,19 +25,23 @@ ctypedef MINT[::1] INDEXFLAT
 ctypedef FFINT[::1] FLATCONTIG
 ctypedef FFINT[:,::1] TABLECONTIG
 
-
+# Base data types.
 ctypedef AnySet[INDEXTYPE] Set;
 ctypedef AnyMap[INDEXTYPE,INDEXTYPE] Map;
 ctypedef AnyVector[INDEXTYPE] Index;
 
+# Lookups and lookup tables.
 ctypedef AnyVector[DATATYPE] Lookup;
 ctypedef AnyVector[Lookup] Table;
-
-ctypedef AnyVector[Index] PersistencePairs;
 
 ctypedef AnyMap[INDEXTYPE,DATATYPE] Column;
 ctypedef AnyVector[Column] BoundaryMatrix;
 ctypedef AnyVector[Index] FlatBoundaryMatrix;
+ctypedef AnyVector[Set] MatrixEntries;
+
+# Come up with better names for these.
+ctypedef AnyMap[INDEXTYPE,Column] SparseLinearCombination;
+ctypedef AnyVector[Index] PersistencePairs;
 
 
 cdef inline Index Vectorize(INDEXFLAT A) noexcept:

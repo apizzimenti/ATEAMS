@@ -1,14 +1,8 @@
 
-from ..common cimport FFINT, FLATCONTIG, TABLECONTIG, INDEXTABLE, INDEXFLAT
+from ..common cimport FFINT, FLATCONTIG, TABLECONTIG, INDEXTABLE, INDEXFLAT, INDEXTYPE, Index, Set, Column, BoundaryMatrix, FlatBoundaryMatrix, bool, MatrixEntries, SparseLinearCombination
 
 import numpy as np
 cimport numpy as np
-
-from libcpp cimport bool
-from libcpp.vector cimport vector as Vector
-from libcpp.unordered_set cimport unordered_set as Set
-from libcpp.set cimport set as OrderedSet
-from libcpp.unordered_map cimport unordered_map as Map
 
 
 cdef class Persistence:
@@ -22,51 +16,59 @@ cdef class Persistence:
 	cdef void __arithmetic(self) noexcept
 	cdef void __flushDataStructures(self, bool premark=*) noexcept
 
+	# Bounds and 
 	cdef INDEXTABLE tranches
 	cdef INDEXFLAT dimensions
-	cdef int homology
-	cdef int cellCount
-	cdef int vertexCount
-	cdef int higherCellCount
-	cdef int defaultRowSize
-	cdef int tagged
-	cdef int low
-	cdef int high
+	cdef INDEXTYPE homology
+	cdef INDEXTYPE cellCount
+	cdef INDEXTYPE vertexCount
+	cdef INDEXTYPE higherCellCount
+	cdef INDEXTYPE defaultRowSize
+	cdef INDEXTYPE tagged
+	cdef INDEXTYPE low
+	cdef INDEXTYPE high
 
-	cdef int cores
-	cdef int minBlockSize
-	cdef int maxBlockSize
+	# Parallelization parameters; deprecated.
+	cdef INDEXTYPE cores
+	cdef INDEXTYPE minBlockSize
+	cdef INDEXTYPE maxBlockSize
 	cdef bool parallel
 
-	cdef Vector[OrderedSet[int]] columnEntries
-	cdef Vector[Vector[int]] columnEntriesIterable
-	cdef Vector[Map[int,FFINT]] columnEntriesCoefficients
-	cdef Vector[Map[int,FFINT]] linearCombinations
+	cdef MatrixEntries columnEntries
+	cdef FlatBoundaryMatrix columnEntriesIterable
+	cdef BoundaryMatrix columnEntriesCoefficients
+	cdef BoundaryMatrix linearCombinations
 
-	cdef Vector[Vector[int]] boundary
-	cdef Vector[Vector[int]] _boundary
-	cdef Vector[int] _dimensions
-	cdef Vector[Vector[int]] _tranches
+	cdef FlatBoundaryMatrix boundary
+	cdef FlatBoundaryMatrix _boundary
+	cdef Index _dimensions
+	cdef FlatBoundaryMatrix _tranches
 
-	cdef Vector[int] markedIterable
-	cdef Set[int] marked
-	cdef Vector[int] premarked
-	cdef Vector[int] nextColumnAdded
+	cdef Index markedIterable
+	cdef Set marked
+	cdef Index premarked
+	cdef Index nextColumnAdded
 	
-	cdef Vector[Vector[int]] ReorderBoundary(self, INDEXFLAT filtration) noexcept
-	cpdef Vector[Vector[int]] ReindexBoundary(self, INDEXFLAT filtration) noexcept
-	cdef Vector[Vector[int]] ReindexSubBoundary(self, INDEXFLAT subcomplex) noexcept
-	cdef Vector[Vector[int]] Vectorize(self, list[list[int]] flattened) noexcept
-	cdef int youngestOf(self, OrderedSet[int] column) noexcept
+	cdef FlatBoundaryMatrix ReorderBoundary(self, INDEXFLAT filtration) noexcept
+	cpdef FlatBoundaryMatrix ReindexBoundary(self, INDEXFLAT filtration) noexcept
+	cdef FlatBoundaryMatrix ReindexSubBoundary(self, INDEXFLAT subcomplex) noexcept
+	cdef FlatBoundaryMatrix Vectorize(self, list[list[int]] flattened) noexcept
+	cdef int youngestOf(self, Set column) noexcept
 
-	cdef OrderedSet[int] RemoveUnmarkedCells(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
-	cdef OrderedSet[int] TwistBuildFace(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
-	cdef OrderedSet[int] Eliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
-	cdef OrderedSet[int] TwistEliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients, Map[int,FFINT] &columnsReduced) noexcept
-	cdef OrderedSet[int] ReducePivotRow(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
-	cdef OrderedSet[int] TwistReducePivotRow(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept
-	cpdef Map[int,Map[int,FFINT]] TwistBasis(self, INDEXFLAT filtration) noexcept
-	cpdef OrderedSet[int] ComputePercolationEvents(self, INDEXFLAT filtration) noexcept
-	cpdef OrderedSet[int] TwistComputePercolationEvents(self, INDEXFLAT filtration) noexcept
-	cpdef OrderedSet[int] ComputeGiantCycles(self, INDEXFLAT filtration) noexcept
-	cpdef Vector[int] ComputeBettiNumbers(self, INDEXFLAT subcomplex) noexcept
+	# Compute persistence via the `twist_reduce` method.
+	cdef Set TwistBuildFace(self, int cell, Set &faces, Column &faceCoefficients) noexcept
+	cdef Set TwistEliminate(self, int youngest, Set &faces, Column &faceCoefficients, Column &columnsReduced) noexcept
+	cdef Set TwistReducePivotRow(self, int cell, Set &faces, Column &faceCoefficients) noexcept
+	cpdef Set TwistComputePercolationEvents(self, INDEXFLAT filtration) noexcept
+	cpdef SparseLinearCombination TwistBasis(self, INDEXFLAT filtration) noexcept
+
+	# Compute persistence via the standard left-looking method.
+	cdef Set RemoveUnmarkedCells(self, int cell, Set &faces, Column &faceCoefficients) noexcept
+	cdef Set Eliminate(self, int youngest, Set &faces, Column &faceCoefficients) noexcept
+	cdef Set ReducePivotRow(self, int cell, Set &faces, Column &faceCoefficients) noexcept
+	cpdef Set ComputePercolationEvents(self, INDEXFLAT filtration) noexcept
+	cpdef Set ComputeGiantCycles(self, INDEXFLAT filtration) noexcept
+	cpdef Index ComputeBettiNumbers(self, INDEXFLAT subcomplex) noexcept
+
+	# Compute persistence via the basis-reduction method.
+	cpdef Set ReduceComputePercolationEvents(self, INDEXFLAT filtration) noexcept

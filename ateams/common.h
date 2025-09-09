@@ -2,6 +2,8 @@
 #include <set>
 #include <vector>
 #include <map>
+#include <iostream>
+
 using namespace std;
 
 // Type for indices and type for data; for now, we use unsigned 32-bit ints for
@@ -24,7 +26,16 @@ typedef vector<Index> PersistencePairs;
 
 // Matrices.
 typedef map<INDEXTYPE,DATATYPE> Column;
+typedef map<INDEXTYPE,Column> SparseLinearCombination;
 typedef vector<Column> BoundaryMatrix;
 typedef vector<Index> FlatBoundaryMatrix;
 
+
+// Helper method for printing `map`s.'
+template <typename MapStorage>
+void printmap(MapStorage m) {
+	for (const auto& [k, v] : m) {
+		cout << (int)k << ": " << (int)v << endl;
+	}
+}
 

@@ -1,18 +1,16 @@
 
 # distutils: language=c++
 
-from ..common cimport INDEXFLAT, FFINT, TABLECONTIG, FLATCONTIG
+from ..common cimport (
+	INDEXFLAT, FFINT, TABLECONTIG, FLATCONTIG, Index, Set, Column, BoundaryMatrix,
+	FlatBoundaryMatrix, MatrixEntries, SparseLinearCombination, bool
+)
 from ..common import FINT
 
 import numpy as np
 cimport numpy as np
 
 from cython.operator cimport dereference
-from libcpp.vector cimport vector as Vector
-from libcpp.unordered_set cimport unordered_set as Set
-from libcpp.set cimport set as OrderedSet
-from libcpp.unordered_map cimport unordered_map as Map
-from libcpp cimport bool
 from libc.math cimport pow
 
 
@@ -131,14 +129,14 @@ cdef class Persistence:
 		# Load premarked indices into a `Vector` so we can refresh quickly.
 		cdef int i;
 
-		self.premarked = Vector[int](self.vertexCount);
+		self.premarked = Index(self.vertexCount);
 		for i in range(self.vertexCount): self.premarked[i] = i;
 
 		# Data structures for storing column information.
-		self.columnEntries = Vector[OrderedSet[int]](self.cellCount);
-		self.columnEntriesIterable = Vector[Vector[int]](self.cellCount);
-		self.columnEntriesCoefficients = Vector[Map[int,FFINT]](self.cellCount);
-		self.linearCombinations = Vector[Map[int,FFINT]](self.cellCount);
+		self.columnEntries = MatrixEntries(self.cellCount);
+		self.columnEntriesIterable = FlatBoundaryMatrix(self.cellCount);
+		self.columnEntriesCoefficients = BoundaryMatrix(self.cellCount);
+		self.linearCombinations = BoundaryMatrix(self.cellCount);
 
 		self.__flushDataStructures();
 
@@ -180,18 +178,18 @@ cdef class Persistence:
 	
 	cdef void __flushDataStructures(self, bool premark=True) noexcept:
 		# Data structures for storing column information.
-		self.columnEntries = Vector[OrderedSet[int]](self.cellCount);
-		self.columnEntriesIterable = Vector[Vector[int]](self.cellCount);
-		self.columnEntriesCoefficients = Vector[Map[int,FFINT]](self.cellCount);
-		self.linearCombinations = Vector[Map[int,FFINT]](self.cellCount);
+		self.columnEntries = MatrixEntries(self.cellCount);
+		self.columnEntriesIterable = FlatBoundaryMatrix(self.cellCount);
+		self.columnEntriesCoefficients = BoundaryMatrix(self.cellCount);
+		self.linearCombinations = BoundaryMatrix(self.cellCount);
 
-		self.marked = Set[int]();
+		self.marked = Set();
 		if premark: self.marked.insert(self.premarked.begin(), self.premarked.end());
-		self.markedIterable = Vector[int](self.cellCount);
-		self.nextColumnAdded = Vector[int](self.cellCount, 0);
+		self.markedIterable = Index(self.cellCount);
+		self.nextColumnAdded = Index(self.cellCount, 0);
 
 
-	cdef Vector[Vector[int]] ReorderBoundary(self, INDEXFLAT filtration) noexcept:
+	cdef FlatBoundaryMatrix ReorderBoundary(self, INDEXFLAT filtration) noexcept:
 		"""
 		Re-indexes the boundary matrix according to the given filtration.
 
@@ -204,11 +202,11 @@ cdef class Persistence:
 			boundary matrix.
 		"""
 		cdef int t, i, j, filtered, unfiltered, face, N, M, dimension, start, stop, please;
-		cdef Vector[int] faces, indices;
-		cdef Vector[Vector[int]] reordered;
+		cdef Index faces, indices;
+		cdef FlatBoundaryMatrix reordered;
 
 		N = self._boundary.size();
-		indices = Vector[int](N);
+		indices = Index(N);
 
 		# Maps the elements of the filtration to their new indices.
 		for t in range(N):
@@ -216,7 +214,7 @@ cdef class Persistence:
 			indices[filtered] = t;
 
 		# Re-orders the (flattened) boundary matrix.
-		reordered = Vector[Vector[int]](N);
+		reordered = FlatBoundaryMatrix(N);
 		for t in range(N):
 			reordered[t] = self._boundary[filtration[t]]
 
@@ -232,7 +230,7 @@ cdef class Persistence:
 		
 
 
-	cpdef Vector[Vector[int]] ReindexBoundary(self, INDEXFLAT filtration) noexcept:
+	cpdef FlatBoundaryMatrix ReindexBoundary(self, INDEXFLAT filtration) noexcept:
 		"""
 		Re-indexes the boundary matrix according to the given filtration.
 
@@ -245,10 +243,10 @@ cdef class Persistence:
 			boundary matrix.
 		"""
 		cdef int t, i, j, filtered, unfiltered, face, N, M, dimension, start, stop, please;
-		cdef Vector[int] faces, indices, temp, high;
+		cdef Index faces, indices, temp, high;
 
 		N = self._boundary.size();
-		indices = Vector[int](N);
+		indices = Index(N);
 
 		# Maps the elements of the filtration to their new indices.
 		for t in range(N):
@@ -278,25 +276,25 @@ cdef class Persistence:
 		return self.boundary
 
 	
-	cdef Vector[Vector[int]] ReindexSubBoundary(self, INDEXFLAT subcomplex) noexcept:
+	cdef FlatBoundaryMatrix ReindexSubBoundary(self, INDEXFLAT subcomplex) noexcept:
 		# Create a "subboundary" matrix that maps old boundary indices to new
 		# ones.
-		cdef Set[int] included;
-		cdef Vector[int] renumbering, faces, retained, dimensions;
-		cdef Vector[Vector[int]] subboundary, subsubboundary;
+		cdef Set included;
+		cdef Index renumbering, faces, retained, dimensions;
+		cdef FlatBoundaryMatrix subboundary, subsubboundary;
 		cdef bool retain;
 		cdef int i, j, M, N, dimension;
 
 		# Keep track of which indices are included in the subcomplex.
 		N = subcomplex.shape[0];
-		included = Set[int]();
+		included = Set();
 		for i in range(N): included.insert(subcomplex[i]);
 
 		# Build the subcomplex.
 		M = self._boundary.size();
-		renumbering = Vector[int](M);
-		subboundary = Vector[Vector[int]](M);
-		retained = Vector[int]();
+		renumbering = Index(M);
+		subboundary = FlatBoundaryMatrix(M);
+		retained = Index();
 
 		for i in range(M):
 			# If this cell is *not* included in the subcomplex, throw it out
@@ -325,8 +323,8 @@ cdef class Persistence:
 		
 		# Now, construct the subboundary matrix.
 		M = retained.size();
-		subboundary = Vector[Vector[int]](M);
-		dimensions = Vector[int](M);
+		subboundary = FlatBoundaryMatrix(M);
+		dimensions = Index(M);
 
 		for i in range(M):
 			subboundary[i] = self._boundary[retained[i]];
@@ -341,15 +339,15 @@ cdef class Persistence:
 
 		# Scan over the array of dimensions, checking how many cells of each
 		# dimension exist (and where their indices stop/start).
-		cdef Vector[Vector[int]] tranches = Vector[Vector[int]]();
-		cdef Vector[int] tranche;
+		cdef FlatBoundaryMatrix tranches = FlatBoundaryMatrix();
+		cdef Index tranche;
 		cdef int t, _tranche = 0;
 
 		N = dimensions.size();
 
 		for t in range(1, N):
 			if dimensions[t] > dimensions[t-1] or t == N-1:
-				tranche = Vector[int](2);
+				tranche = Index(2);
 				tranche[0] = _tranche;
 				tranche[1] = t if t < N-1 else N;
 				tranches.push_back(tranche);
@@ -366,13 +364,13 @@ cdef class Persistence:
 		self.high = self._tranches[self.homology][1];
 
 		# Set pre-marked vertices again.
-		self.premarked = Vector[int](self.vertexCount);
+		self.premarked = Index(self.vertexCount);
 		for i in range(self.vertexCount): self.premarked[i] = i;
 
 		return self.boundary
 		
 
-	cdef Vector[Vector[int]] Vectorize(self, list[list[int]] flattened) noexcept:
+	cdef FlatBoundaryMatrix Vectorize(self, list[list[int]] flattened) noexcept:
 		"""
 		Convert a list of lists into C++ vectors.
 
@@ -382,15 +380,15 @@ cdef class Persistence:
 		Returns:
 			C++ `std::vector` (cast as as `NumPy` array) representing the same data.
 		"""
-		cdef Vector[Vector[int]] outer;
-		cdef Vector[int] inner, dimensions;
+		cdef FlatBoundaryMatrix outer;
+		cdef Index inner, dimensions;
 		cdef int i, j, lower, M, N, dimension;
 
 		# We only want to get boundary matrices for indices of dimension 1 or
 		# greater; i.e. we're excluding vertices.
 		M = len(flattened);
-		outer = Vector[Vector[int]](M);
-		dimensions = Vector[int](M);
+		outer = FlatBoundaryMatrix(M);
+		dimensions = Index(M);
 
 		for i in range(M):
 			# If we're dealing with a non-vertex, we just copy the original
@@ -398,12 +396,12 @@ cdef class Persistence:
 			# has no boundary.
 			try:
 				N = len(flattened[i]);
-				inner = Vector[int](N);
+				inner = Index(N);
 				for j in range(N): inner[j] = flattened[i][j];
 
 				dimension = <int>(N/2);
 			except:
-				inner = Vector[int](0);
+				inner = Index(0);
 				dimension = 0;
 			
 			dimensions[i] = dimension;
@@ -416,15 +414,15 @@ cdef class Persistence:
 
 		# Scan over the array of dimensions, checking how many cells of each
 		# dimension exist (and where their indices stop/start).
-		cdef Vector[Vector[int]] tranches = Vector[Vector[int]]();
-		cdef Vector[int] tranche;
+		cdef FlatBoundaryMatrix tranches = FlatBoundaryMatrix();
+		cdef Index tranche;
 		cdef int t, _tranche = 0;
 
 		N = dimensions.size();
 
 		for t in range(1, N):
 			if dimensions[t] > dimensions[t-1] or t == N-1:
-				tranche = Vector[int](2);
+				tranche = Index(2);
 				tranche[0] = _tranche;
 				tranche[1] = t if t < N-1 else N;
 				tranches.push_back(tranche);
@@ -436,11 +434,11 @@ cdef class Persistence:
 		return outer;
 
 
-	cdef int youngestOf(self, OrderedSet[int] column) noexcept:
+	cdef int youngestOf(self, Set column) noexcept:
 		return dereference(column.rbegin());
 
 	
-	cdef OrderedSet[int] Eliminate(self, int youngest, OrderedSet[int] faces, Map[int,FFINT] &faceCoefficients) noexcept:
+	cdef Set Eliminate(self, int youngest, Set faces, Column &faceCoefficients) noexcept:
 		"""
 		Performs Gaussian elimination on the row specified by `faceCoefficients`
 		and the row with a pivot in column `youngest`.
@@ -456,7 +454,7 @@ cdef class Persistence:
 		Returns:
 			`std::set` of remaining faces.
 		"""
-		cdef Vector[int] entriesIterable;
+		cdef Index entriesIterable;
 		cdef int i, entry, N;
 		cdef FFINT _q, inverse, q, entryCoefficient, faceCoefficient, mul, add;
 
@@ -494,7 +492,7 @@ cdef class Persistence:
 		return faces
 
 
-	cdef OrderedSet[int] RemoveUnmarkedCells(self, int cell, OrderedSet[int] faces, Map[int,FFINT] &faceCoefficients) noexcept:
+	cdef Set RemoveUnmarkedCells(self, int cell, Set faces, Column &faceCoefficients) noexcept:
 		"""
 		Given the latest cell added to the filtration, remove unmarked
 		(nonpivot) entries from its boundary.
@@ -522,7 +520,7 @@ cdef class Persistence:
 		return faces;
 
 	
-	cdef OrderedSet[int] ReducePivotRow(self, int cell, OrderedSet[int] faces, Map[int,FFINT] &faceCoefficients) noexcept:
+	cdef Set ReducePivotRow(self, int cell, Set faces, Column &faceCoefficients) noexcept:
 		"""
 		Reduces the pivot row corresponding to cell `cell`.
 
@@ -533,7 +531,7 @@ cdef class Persistence:
 			An ordered set of indices corresponding to nonzero entries in the
 			of the pivot column.
 		"""
-		cdef OrderedSet[int] youngestColumnEntries;
+		cdef Set youngestColumnEntries;
 		cdef int youngest;
 		cdef FFINT _q, q;
 
@@ -554,7 +552,7 @@ cdef class Persistence:
 		return faces;
 			
 
-	cpdef OrderedSet[int] ComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
+	cpdef Set ComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
 		"""
 		Computes the times of homological percolation events given a filtration
 		and a boundary matrix.
@@ -567,14 +565,14 @@ cdef class Persistence:
 		"""
 		# Flush the set of marked indices, adding premarked ones.
 		self.__flushDataStructures(premark=False);
-		cdef OrderedSet[int] events = OrderedSet[int]();
+		cdef Set events = Set();
 
 		# Construct the boundary matrix for this filtration; variables for
 		# objects.
-		cdef Vector[Vector[int]] boundary = self.ReindexBoundary(filtration);
-		cdef Vector[int] facesIterable, degree = Vector[int](self.cellCount);
-		cdef OrderedSet[int] faces;
-		cdef Map[int,FFINT] faceCoefficients;
+		cdef FlatBoundaryMatrix boundary = self.ReindexBoundary(filtration);
+		cdef Index facesIterable, degree = Index(self.cellCount);
+		cdef Set faces;
+		cdef Column faceCoefficients;
 		cdef int t, j, cell, dimension, time, tagged, youngest;
 
 		# TODO: shouldn't have to iterate over vertices
@@ -588,8 +586,8 @@ cdef class Persistence:
 
 			# Create buckets for indices and coefficients; these are created and
 			# stored ONCE, but accessed many times.
-			faces = OrderedSet[int]();
-			faceCoefficients = Map[int,FFINT]();
+			faces = Set();
+			faceCoefficients = Column();
 
 			# Eliminate.
 			faces = self.ReducePivotRow(cell, faces, faceCoefficients);
@@ -608,7 +606,7 @@ cdef class Persistence:
 			# Otherwise, store the row in the appropriate locations.
 			else:
 				youngest = self.youngestOf(faces);
-				facesIterable = Vector[int]();
+				facesIterable = Index();
 				facesIterable.insert(facesIterable.begin(), faces.begin(), faces.end());
 
 				self.columnEntries[youngest] = faces;
@@ -617,7 +615,7 @@ cdef class Persistence:
 				degree[youngest] = t;
 
 		# # Once we're done eliminating, check over what we find.
-		cdef OrderedSet[int] unmarked;
+		cdef Set unmarked;
 
 		for j in range(tagged):
 			cell = self.markedIterable[j];
@@ -628,7 +626,7 @@ cdef class Persistence:
 		return events
 
 
-	cdef OrderedSet[int] TwistEliminate(self, int youngest, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients, Map[int,FFINT] &columnsReduced) noexcept:
+	cdef Set TwistEliminate(self, int youngest, Set &faces, Column &faceCoefficients, Column &columnsReduced) noexcept:
 		"""
 		Performs Gaussian elimination on the row specified by `faceCoefficients`
 		and the row with a pivot in column `youngest`.
@@ -644,7 +642,7 @@ cdef class Persistence:
 		Returns:
 			`std::set` of remaining faces.
 		"""
-		cdef Vector[int] entriesIterable;
+		cdef Index entriesIterable;
 		cdef int i, entry, N, nextAdded;
 		cdef FFINT _q, inverse, q, entryCoefficient, faceCoefficient, mul, add;
 
@@ -685,7 +683,7 @@ cdef class Persistence:
 		return faces
 
 
-	cdef OrderedSet[int] TwistBuildFace(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept:
+	cdef Set TwistBuildFace(self, int cell, Set &faces, Column &faceCoefficients) noexcept:
 		"""
 		Build the face. Here, we don't delete "unmarked" cells, since the column
 		deletion does that for us.
@@ -710,7 +708,7 @@ cdef class Persistence:
 		return faces;
 	
 
-	cdef OrderedSet[int] TwistReducePivotRow(self, int cell, OrderedSet[int] &faces, Map[int,FFINT] &faceCoefficients) noexcept:
+	cdef Set TwistReducePivotRow(self, int cell, Set &faces, Column &faceCoefficients) noexcept:
 		"""
 		Reduces the pivot row corresponding to cell `cell`.
 
@@ -721,8 +719,8 @@ cdef class Persistence:
 			An ordered set of indices corresponding to nonzero entries in the
 			of the pivot column.
 		"""
-		cdef OrderedSet[int] youngestColumnEntries;
-		cdef Map[int,FFINT] columnsReduced = Map[int,FFINT]();
+		cdef Set youngestColumnEntries;
+		cdef Column columnsReduced = Column();
 		cdef int youngest;
 		cdef FFINT _q, q;
 
@@ -744,7 +742,7 @@ cdef class Persistence:
 		return faces;
 
 
-	cpdef OrderedSet[int] TwistComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
+	cpdef Set TwistComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
 		"""
 		Computes the times of homological percolation events given a filtration
 		and a boundary matrix. Uses a modified version of the twist_reduce
@@ -759,14 +757,14 @@ cdef class Persistence:
 		"""
 		# Flush the set of marked indices, adding premarked ones.
 		self.__flushDataStructures();
-		cdef OrderedSet[int] events = OrderedSet[int]();
+		cdef Set events = Set();
 
 		# Construct the boundary matrix for this filtration; variables for
 		# objects.
-		cdef Vector[Vector[int]] boundary = self.ReindexBoundary(filtration);
-		cdef Vector[int] facesIterable, degree = Vector[int](self.cellCount);
-		cdef OrderedSet[int] faces;
-		cdef Map[int,FFINT] faceCoefficients;
+		cdef FlatBoundaryMatrix boundary = self.ReindexBoundary(filtration);
+		cdef Index facesIterable, degree = Index(self.cellCount);
+		cdef Set faces;
+		cdef Column faceCoefficients;
 		cdef int t, j, dim, cell, dimension, time, tagged, youngest;
 
 		tagged = 0;
@@ -782,8 +780,8 @@ cdef class Persistence:
 
 				# Create buckets for indices and coefficients; these are created and
 				# stored ONCE, but accessed many times.
-				faces = OrderedSet[int]();
-				faceCoefficients = Map[int,FFINT]();
+				faces = Set();
+				faceCoefficients = Column();
 
 				# Eliminate.
 				faces = self.TwistReducePivotRow(cell, faces, faceCoefficients);
@@ -801,7 +799,7 @@ cdef class Persistence:
 
 				# Otherwise, we can just zero out the youngest column.
 				else:
-					facesIterable = Vector[int]();
+					facesIterable = Index();
 					facesIterable.insert(facesIterable.begin(), faces.begin(), faces.end());
 					self.columnEntries[t] = faces;
 					self.columnEntriesIterable[t] = facesIterable;
@@ -810,9 +808,9 @@ cdef class Persistence:
 					youngest = self.youngestOf(faces);
 					self.nextColumnAdded[youngest] = t;
 
-					self.columnEntries[youngest] = OrderedSet[int]();
-					self.columnEntriesIterable[youngest] = Vector[int]();
-					self.columnEntriesCoefficients[youngest] = Map[int,FFINT]();
+					self.columnEntries[youngest] = Set();
+					self.columnEntriesIterable[youngest] = Index();
+					self.columnEntriesCoefficients[youngest] = Column();
 
 			dim = dim-1;
 
@@ -824,7 +822,7 @@ cdef class Persistence:
 		return events
 
 
-	cpdef Map[int,Map[int,FFINT]] TwistBasis(self, INDEXFLAT filtration) noexcept:
+	cpdef SparseLinearCombination TwistBasis(self, INDEXFLAT filtration) noexcept:
 		"""
 		Reports the linear combinations corresponding to basis elements of the `homology`th
 		homology group.
@@ -833,20 +831,35 @@ cdef class Persistence:
 			filtration (np.array): Order in which cells are added.
 
 		Returns:
-			A `set` of times at which homological percolation occurs.
+			A dictionary corresponding to linear combinations of basis elements.
 		"""
-		cdef OrderedSet[int] events = self.TwistComputePercolationEvents(filtration);
-		cdef Map[int,Map[int,FFINT]] basis = Map[int,Map[int,FFINT]]();
+		cdef Set events = self.TwistComputePercolationEvents(filtration);
+		cdef SparseLinearCombination basis = SparseLinearCombination();
 		
 		for e in events:
 			basis[e] = self.linearCombinations[e];
 
 		return basis;
-		
 
+
+	cpdef Set ReduceComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
+		"""
+		Computes percolation events by pre-computing a basis for the desired
+		homology group, then using Gaussian elimination to determine whether any
+		of the basis elements are in the image of the map induced by inclusion.
+
+		Args:
+			filtration (INDEXFLAT): A NumPy array indicating the order in which
+				\(i\)-dimensional cells are to be added.
+		
+		Returns:
+			The set of times at which each element of the basis is found.
+		"""
+		# If it hasn't already been computed, find the basis for the underlying
+		# space.
 
 	
-	cpdef OrderedSet[int] ComputeGiantCycles(self, INDEXFLAT filtration) noexcept:
+	cpdef Set ComputeGiantCycles(self, INDEXFLAT filtration) noexcept:
 		"""
 		Computes the times of homological percolation events given a filtration
 		and a boundary matrix.
@@ -859,14 +872,14 @@ cdef class Persistence:
 		"""
 		# Flush the set of marked indices, adding premarked ones.
 		self.__flushDataStructures();
-		cdef OrderedSet[int] events = OrderedSet[int]();
+		cdef Set events = Set();
 
 		# Construct the boundary matrix for this filtration; variables for
 		# objects.
-		cdef Vector[Vector[int]] boundary = self.ReorderBoundary(filtration);
-		cdef Vector[int] facesIterable, degree = Vector[int](self.cellCount);
-		cdef OrderedSet[int] faces;
-		cdef Map[int,FFINT] faceCoefficients;
+		cdef FlatBoundaryMatrix boundary = self.ReorderBoundary(filtration);
+		cdef Index facesIterable, degree = Index(self.cellCount);
+		cdef Set faces;
+		cdef Column faceCoefficients;
 		cdef int t, j, cell, dimension, time, tagged, youngest;
 
 		# TODO: shouldn't have to iterate over vertices
@@ -880,8 +893,8 @@ cdef class Persistence:
 
 			# Create buckets for indices and coefficients; these are created and
 			# stored ONCE, but accessed many times.
-			faces = OrderedSet[int]();
-			faceCoefficients = Map[int,FFINT]();
+			faces = Set();
+			faceCoefficients = Column();
 
 			# Eliminate.
 			faces = self.ReducePivotRow(cell, faces, faceCoefficients);
@@ -900,7 +913,7 @@ cdef class Persistence:
 			# Otherwise, store the row in the appropriate locations.
 			else:
 				youngest = self.youngestOf(faces);
-				facesIterable = Vector[int]();
+				facesIterable = Index();
 				facesIterable.insert(facesIterable.begin(), faces.begin(), faces.end());
 
 				self.columnEntries[youngest] = faces;
@@ -908,8 +921,8 @@ cdef class Persistence:
 				self.columnEntriesCoefficients[youngest] = faceCoefficients;
 				degree[youngest] = t;
 
-		# # Once we're done eliminating, check over what we find.
-		cdef OrderedSet[int] unmarked;
+		# Once we're done eliminating, check over what we find.
+		cdef Set unmarked;
 
 		for j in range(tagged):
 			cell = self.markedIterable[j];
@@ -920,7 +933,7 @@ cdef class Persistence:
 		return events
 	
 	
-	cpdef Vector[int] ComputeBettiNumbers(self, INDEXFLAT subcomplex) noexcept:
+	cpdef Index ComputeBettiNumbers(self, INDEXFLAT subcomplex) noexcept:
 		"""
 		Computes the _Betti numbers_ — the ranks of the homology groups — of the
 		subcomplex specified.
@@ -930,16 +943,16 @@ cdef class Persistence:
 				boundary matrix to include in the complex.
 
 		Returns:
-			A C++ `Vector[int]` where the \(i\)th entry is the \(i\)th Betti number.
+			A C++ `Index` where the \(i\)th entry is the \(i\)th Betti number.
 		"""
 		# Construct the boundary matrix for this filtration; variables for
 		# objects. Flush the set of marked indices, adding premarked ones.
-		cdef Vector[Vector[int]] subboundary = self.ReindexSubBoundary(subcomplex);
+		cdef FlatBoundaryMatrix subboundary = self.ReindexSubBoundary(subcomplex);
 		self.__flushDataStructures(premark=False);
 
-		cdef Vector[int] facesIterable, degree = Vector[int](self.cellCount);
-		cdef OrderedSet[int] faces;
-		cdef Map[int,FFINT] faceCoefficients;
+		cdef Index facesIterable, degree = Index(self.cellCount);
+		cdef Set faces;
+		cdef Column faceCoefficients;
 		cdef int t, j, cell, time, tagged, youngest;
 		
 		tagged = 0;
@@ -952,8 +965,8 @@ cdef class Persistence:
 
 			# Create buckets for indices and coefficients; these are created and
 			# stored ONCE, but accessed many times.
-			faces = OrderedSet[int]();
-			faceCoefficients = Map[int,FFINT]();
+			faces = Set();
+			faceCoefficients = Column();
 
 			# Eliminate.
 			faces = self.ReducePivotRow(cell, faces, faceCoefficients);
@@ -971,7 +984,7 @@ cdef class Persistence:
 			# Otherwise, store the row in the appropriate locations.
 			else:
 				youngest = self.youngestOf(faces);
-				facesIterable = Vector[int]();
+				facesIterable = Index();
 				facesIterable.insert(facesIterable.begin(), faces.begin(), faces.end());
 
 				self.columnEntries[youngest] = faces;
@@ -980,8 +993,8 @@ cdef class Persistence:
 				degree[youngest] = t;
 
 		# Once we're done eliminating, check over what we find.
-		cdef OrderedSet[int] unmarked;
-		cdef Vector[int] bettis = Vector[int](self._tranches.size(),0);
+		cdef Set unmarked;
+		cdef Index bettis = Index(self._tranches.size(),0);
 
 		for j in range(tagged):
 			cell = self.markedIterable[j];

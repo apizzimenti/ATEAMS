@@ -1,8 +1,14 @@
 
 # distutils: language=c++
 
-from ..common cimport INDEXFLAT, Vectorize, DATATYPE, BoundaryMatrix, Column, Map
-from .LinBoxMethods cimport ComputePercolationEvents, ZpComputePercolationEvents, LinearComputePercolationEvents
+from ..common cimport (
+	INDEXFLAT, Vectorize, DATATYPE, BoundaryMatrix, Column, Map
+)
+
+from .LinBoxMethods cimport (
+	ComputePercolationEvents, ZpComputePercolationEvents,
+	LinearComputePercolationEvents, LinearComputeBasis
+)
 
 from libc.math cimport pow
 
@@ -225,4 +231,28 @@ cdef class Twist:
 
 		return ZpComputePercolationEvents(
 			self.characteristic, self.workingBoundary, self.breaks, self.cellCount
+		);
+
+
+	cpdef SparseLinearCombination LinearComputeBasis(self, INDEXFLAT filtration) noexcept:
+		"""
+		Given a filtration --- i.e. a reordering of the columns of the full
+		boundary matrix --- gives times at which essential cycles of dimension
+		`dimension` were created. Performs arithmetic using flattened addition
+		and multiplication tables stored in `vector<char>`s.
+
+		Args:
+			filtration (np.ndarray): An array of column indices.
+
+		Returns:
+			A set containing indices at which essential cycles appear.
+		"""
+		self.workingBoundary = self.ReindexBoundaryMatrix(filtration);
+
+		cdef Set events = self.LinearComputePercolationEvents(filtration);
+		cdef SparseLinearCombination basis = SparseLinearCombination();
+
+		return LinearComputeBasis(
+			self.characteristic, self.flatAddition, self.flatMultiplication, self.negation, self.inversion,
+			self.workingBoundary, self.breaks, self.cellCount, self.dimension
 		);
