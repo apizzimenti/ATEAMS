@@ -2,14 +2,16 @@
 # distutils: language=c++
 
 from ..common cimport (
-	INDEXFLAT, Vectorize, DATATYPE, BoundaryMatrix, Column, Map, Basis, Bases
+	INDEXFLAT, Vectorize, INDEXTYPE, DATATYPE, BoundaryMatrix, Row, Column, Map,
+	Basis, Bases, printBoundaryMatrix
 )
 
 from .LinBoxMethods cimport (
-	ComputePercolationEvents, ZpComputePercolationEvents,
-	LinearComputePercolationEvents, LinearComputeBases
+	ComputePercolationEvents, ZpComputePercolationEvents, LinearComputePercolationEvents,
+	LinearComputeBases, CobasisSolve, CobasisComputePercolationEvents, RankComputePercolationEvents
 )
 
+from cython.operator cimport dereference, postincrement
 from libc.math cimport pow
 
 
@@ -73,11 +75,29 @@ cdef class Twist:
 		self.fullBoundary = Vectorize(boundary);
 		self.referenceBoundary = self.FillBoundaryMatrix(boundary);
 		self.workingBoundary = BoundaryMatrix(self.referenceBoundary);
-		self.bases = Bases(self.breaks.size());
+
+		cdef int N = self.breaks[self.dimension]-self.breaks[self.dimension-1];
+		self.partialBoundary = self.PartialBoundaryMatrix(self.dimension);
+		self.partialCoboundary = self.__transpose(self.partialBoundary, N);
 
 		# Construct arithmetic operations.
 		self.__arithmetic();
 
+		# Construct bases. This will take a LONG time sometimes, but the
+		# precomputation should be worth it.
+		# TODO maybe we can pass pre-computed bases as an argument? That would
+		# be super slick.
+		self.bases = Bases();
+		self.cobasis = self.LinearComputeCobasis();
+
+		# Construct an augmented matrix where the first <whatever> columns are
+		# the cobasis, and the rest is the coboundary matrix.
+		cdef int i = 0, bSize = self.cobasis.size(), pBSize = self.partialCoboundary.size();
+		self.augmentedCoboundary = BoundaryMatrix(bSize+pBSize, Column());
+
+		for i in range(bSize+pBSize):
+			if i < bSize: self.augmentedCoboundary[i] = Column(self.cobasis[i]);
+			else: self.augmentedCoboundary[i] = Column(self.partialCoboundary[i-bSize]);
 
 	cdef void __arithmetic(self) noexcept:
 		# Given a field characteristic, construct addition and multiplication
@@ -118,8 +138,52 @@ cdef class Twist:
 
 		self.negation = negation;
 		self.inversion = inverse;
-	
 
+
+	cdef BoundaryMatrix __transpose(self, BoundaryMatrix A, int columns) noexcept:
+		"""
+		Finds the transpose of the given BoundaryMatrix.
+		"""
+		cdef BoundaryMatrix T = BoundaryMatrix(columns, Column());
+		cdef INDEXTYPE col, row;
+		cdef DATATYPE q;
+		cdef Column column;
+		cdef Column.iterator it;
+
+		for col in range(A.size()):
+			column = A[col];
+			it = column.begin();
+
+			while it != column.end():
+				row = dereference(it).first;
+				q = dereference(it).second;
+				T[row][col] = q;
+
+				postincrement(it);
+
+		return T;
+
+
+	cdef BoundaryMatrix __asRows(self, BoundaryMatrix A, int rows) noexcept:
+		cdef BoundaryMatrix R = BoundaryMatrix(rows, Row());
+		cdef int row, col;
+		cdef DATATYPE q;
+		cdef Column column;
+		cdef Column.iterator it;
+
+		for col in range(A.size()):
+			column = A[col];
+			it = column.begin();
+
+			while it != column.end():
+				row = dereference(it).first;
+				q = dereference(it).second;
+				R[row][col] = q;
+				postincrement(it);
+		
+		return R;
+
+	
 	cdef BoundaryMatrix FillBoundaryMatrix(self, INDEXFLAT boundary) noexcept:
 		"""
 		Fills the boundary matrix.
@@ -174,6 +238,48 @@ cdef class Twist:
 				self.workingBoundary[column] = reindexed;
 		
 		return self.workingBoundary;
+
+
+	cdef BoundaryMatrix PartialBoundaryMatrix(self, int dimension) noexcept:
+		"""
+		Fills the partial boundary matrix of the appropriate dimension.
+		"""
+		cdef int lower, low, high, col, row;
+		cdef BoundaryMatrix boundary;
+		cdef Column existing, relabeled;
+
+		# Normalize indices.
+		lower = self.breaks[dimension-1];
+		low = self.breaks[dimension];
+		high = self.breaks[dimension+1] if dimension+1 < self.breaks.size() else self.cellCount;
+
+		boundary = BoundaryMatrix(high-low);
+
+		for col in range(low, high):
+			existing = self.referenceBoundary[col];
+			relabeled = Column();
+
+			# This is clunky.
+			for existingRow, existingCoefficient in existing:
+				relabeled[<INDEXTYPE>(existingRow-lower)] = existingCoefficient;
+
+			boundary[col-low] = relabeled;
+		
+		return boundary;
+
+
+	cdef Index ReindexPartialFiltration(self, INDEXFLAT filtration) noexcept:
+		cdef int low, high, t;
+		cdef Index reindexed;
+		low = self.breaks[self.dimension];
+		high = self.breaks[self.dimension+1];
+
+		reindexed = Index(high-low);
+
+		for t in range(low, high):
+			reindexed[t-low] = filtration[t]-low;
+
+		return reindexed;
 
 	
 	cpdef Set ComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
@@ -237,19 +343,106 @@ cdef class Twist:
 		);
 
 
-	cpdef Bases LinearComputeBases(self) noexcept:
-		"""
-		Computes bases for the homology groups of the underlying space.
+	cpdef Set CobasisComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
+		cdef Basis cobasis = self.LinearComputeCobasis();
+		cdef BoundaryMatrix boundary = self.PartialBoundaryMatrix(self.dimension);
+		cdef int M, N;
 
-		Returns:
-			A `Bases` object (which is just a `std::vector` of `Basis` objects)
-			for the underlying space. Given the configuration of `LinearComputeBases`,
-			only bases for the top-level dimension down to `dimension-1` are given.
+		M = self.breaks[self.dimension]-self.breaks[self.dimension-1];
+		N = self.breaks[self.dimension+1]-self.breaks[self.dimension];
+
+		return CobasisComputePercolationEvents(
+			boundary, cobasis, M, N, self.characteristic, <int>(cobasis.size()/2)
+		)
+
+
+	cpdef Set RankComputePercolationEvents(self, INDEXFLAT filtration) noexcept:
+		cdef Basis cobasis;
+
+		# Check whether we've already computed the cobasis.
+		if self.cobasis.size() < 1: cobasis = self.LinearComputeCobasis();
+		else: cobasis = self.cobasis;
+
+		cdef int M, N;
+		M = self.breaks[self.dimension+1]-self.breaks[self.dimension];
+		N = self.augmentedCoboundary.size();
+
+		return RankComputePercolationEvents(
+			self.augmentedCoboundary, M, N, self.cobasis.size(), self.characteristic, <int>(cobasis.size()/2)
+		)
+
+
+	cpdef Basis LinearComputeBasis(self) noexcept:
 		"""
-		self.bases = LinearComputeBases(
+		Computes bases for the `dimension`th homology group.
+		"""
+		if self.bases.size() > 0: return self.bases[self.dimension];
+
+		cdef Bases existingBases = LinearComputeBases(
 			self.characteristic, self.flatAddition, self.flatMultiplication, self.negation, self.inversion,
 			self.referenceBoundary, self.breaks, self.cellCount, self.dimension
 		);
 
-		return self.bases;
+		# Reindex the bases.
+		cdef Bases reindexedBases = Bases(existingBases.size());
+		cdef Basis existingBasis, reindexedBasis;
+		cdef Column existingColumn, reindexedColumn;
+		cdef INDEXTYPE low, i, j, row, col;
+		cdef DATATYPE q;
 
+		for i in range(existingBases.size()):
+			low = self.breaks[i];
+			existingBasis = existingBases[i];
+			reindexedBasis = Basis(existingBasis.size());
+
+			for j in range(existingBasis.size()):
+				existingColumn = existingBasis[j];
+				reindexedColumn = Column();
+
+				for row, q in existingColumn:
+					reindexedColumn[row-low] = q;
+
+				reindexedBasis[j] = reindexedColumn;
+
+			reindexedBases[i] = reindexedBasis;
+
+		self.bases = reindexedBases;
+		return self.bases[self.dimension];
+
+	
+	cpdef Basis LinearComputeCobasis(self) noexcept:
+		self.LinearComputeBasis();
+
+		cdef Basis combined, combinedT, cobasis, cyclebasis;
+		cdef BoundaryMatrix coboundary;
+		cdef Column solution, cocycle;
+		cdef int t, columns, rows;
+
+		# Get the coboundary matrix to adjoin to the basis.
+		coboundary = self.PartialBoundaryMatrix(self.dimension+1);
+		cyclebasis = self.bases[self.dimension];
+		combined = Basis(coboundary.size()+cyclebasis.size(), Column());
+
+		for t in range(cyclebasis.size()): combined[t] = cyclebasis[t];
+		for t in range(coboundary.size()): combined[t+cyclebasis.size()] = coboundary[t];
+
+		# Transpose.
+		columns = self.breaks[self.dimension+1]-self.breaks[self.dimension];
+		rows = cyclebasis.size() + coboundary.size();
+		combinedT = self.__transpose(combined, columns);
+
+		cobasis = Basis(cyclebasis.size());
+
+		# Sample.
+		for t in range(cyclebasis.size()):
+			solution = Column();
+			solution[t] = <DATATYPE>1;
+
+			cocycle = CobasisSolve(
+				combinedT, solution, rows, columns, self.characteristic, 32
+			)
+
+			cobasis[t] = cocycle;
+
+		self.cobasis = cobasis;
+		return cobasis;

@@ -35,8 +35,10 @@ typedef vector<Basis> Bases;
 // Helper method for printing `map`s.'
 template <typename MapStorage>
 void printmap(MapStorage m) {
+	cout << "{ ";
 	for (const auto& [k, v] : m) {
-		cout << (int)k << ": " << (int)v << endl;
+		cout << (int)k << ": " << (int)v << ", ";
 	}
+	cout << " }" << endl;
 }
 

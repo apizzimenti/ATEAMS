@@ -4,8 +4,11 @@
 #include <linbox/matrix/sparse-matrix.h>
 #include <linbox/ring/modular.h>
 #include <linbox/field/gf2.h>
-#include <linbox/blackbox/zo-gf2.h>
+#include <linbox/solutions/methods.h>
+#include <linbox/blackbox/submatrix.h>
+#include <linbox/blackbox/transpose.h>
 #include <iostream>
+#include <cmath>
 
 #include "LinBoxMethods.h"
 
@@ -16,12 +19,12 @@ typedef LinBox::SparseMatrix<Zp, LinBox::SparseMatrixFormat::SparseSeq> ZpMatrix
 typedef LinBox::DenseVector<Zp> ZpVector;
 typedef LinBox::ZeroOne<LinBox::GF2> Z2Matrix;
 typedef LinBox::DenseVector<LinBox::GF2> Z2Vector;
+typedef vector<ZpVector> ZpBasis;
 
 
 template <typename Vector>
 bool containsNonzero(Vector X) {
-	// Check whether there are nonzero elements in the VVector.
-
+	// Check whether there are nonzero elements in the Vector.
 	for (auto it = X.begin(); it != X.end(); ++it) {
 		if (*it > 0) { return true; }
 	}
@@ -29,8 +32,67 @@ bool containsNonzero(Vector X) {
 	return false;
 }
 
+
 template <typename Matrix, typename Field>
-Matrix FieldFill(Index coboundary, int M, int N, Field F) {
+Matrix MatrixFillFromBoundaryMatrix(BoundaryMatrix boundary, int M, int N, Field F) {
+	// Construct the sparse matrix.
+	Matrix A(F, M, N);
+	INDEXTYPE row;
+
+	// Fill in values from the columns.
+	for (int col=0; col < N; col++) {
+		for (auto it=boundary[col].begin(); it != boundary[col].end(); ++it) {
+			typename Field::Element q;
+			F.init(q, it->second);
+			row = it->first;
+			
+			A.setEntry(row,col,q);
+		}
+	}
+
+	return A;
+}
+
+
+template <typename Matrix, typename Field>
+Matrix TransposeFillFromBoundaryMatrix(BoundaryMatrix boundary, int M, int N, Field F) {
+	// Construct the sparse matrix.
+	Matrix A(F, N, M);
+	INDEXTYPE row;
+
+	// Fill in values from the columns.
+	for (int col=0; col < N; col++) {
+		for (auto it=boundary[col].begin(); it != boundary[col].end(); ++it) {
+			typename Field::Element q;
+			F.init(q, it->second);
+			row = it->first;
+			
+			A.setEntry(col,row,q);
+		}
+	}
+
+	return A;
+}
+
+
+template <typename Vector, typename Field>
+Vector VectorFillFromColumn(Column column, int M, Field F) {
+	Vector x(F, M);
+
+	for (auto it=column.begin(); it!=column.end(); ++it) {
+		if (it->first >= M) break;
+
+		typename Field::Element q;
+		F.init(q, it->second);
+		x.setEntry(it->first, q);
+	}
+	
+	return x;
+}
+
+
+template <typename Matrix, typename Field>
+Matrix MatrixFillFromIndex(Index coboundary, int M, int N, Field F) {
 	// Construct the sparse coboundary matrix.
 	Matrix A(F, M, N);
 
@@ -48,7 +110,7 @@ Matrix FieldFill(Index coboundary, int M, int N, Field F) {
 }
 
 template <typename Matrix, typename Vector>
-Index populate(Matrix A, Vector X) {
+Index PopulateIndex(Matrix A, Vector X) {
 	// Populate a vector with entries from a LinBox vector.
 	Index x(A.coldim());
 	
@@ -57,6 +119,46 @@ Index populate(Matrix A, Vector X) {
 	}
 
 	return x;
+}
+
+template <typename Vector>
+Column PopulateColumn(Vector f) {
+	Column out = Column();
+
+	for (size_t k=0; k < f.size(); k++) {
+		if (f.getEntry(k) != 0) {
+			out[k] = f.getEntry(k);
+		}
+	}
+
+	return out;
+}
+
+
+Column CobasisSolve(BoundaryMatrix bases, Column solution, int M, int N, int p, int maxTries) {
+	// Construct the finite field and construct the matrix. If we're over Z/2Z,
+	// use specialized matrices for our operations.
+	typedef ZpMatrix Matrix;
+	typedef ZpVector Vector;
+	typedef Zp Field;
+
+	Field F(p);
+	Matrix A = MatrixFillFromBoundaryMatrix<Matrix,Field>(bases, M, N, F);
+	Vector f(F, A.coldim()), b(F, A.rowdim());
+
+	// Populate the output vector (should just have a 1 and all else zero).
+	for (auto it=solution.begin(); it!=solution.end(); ++it) {
+		typename Field::Element q;
+		F.init(q, it->second);
+		b.setEntry(it->first, q);
+	}
+
+	// Sample solutions!
+	LinBox::Method::SparseElimination METHOD;
+	solve(f, A, b, METHOD);
+
+	// Populate a Column with the values in f, and return.
+	return PopulateColumn(f);
 }
 
 
@@ -74,7 +176,7 @@ Index LanczosKernelSample(Index coboundary, int M, int N, int p, int maxTries) {
 	// }
 
 	Field F(p);
-	Matrix A = FieldFill<Matrix,Field>(coboundary, M, N, F);
+	Matrix A = MatrixFillFromIndex<Matrix,Field>(coboundary, M, N, F);
 	ZpVector X(F, A.coldim()), b(F, A.rowdim());
 	
 	// Preconditioners in order of strength. We try all but FullDiagonal twice;
@@ -109,24 +211,9 @@ Index LanczosKernelSample(Index coboundary, int M, int N, int p, int maxTries) {
 		}
 	}
 
-	return populate(A, X);
+	return PopulateIndex(A, X);
 }
 
-
-void Reduce(Index boundary, int M, int N, int p) {
-	// Construct the finite field and construct the matrix. If we're over Z/2Z,
-	// use specialized matrices for our operations.
-	typedef ZpMatrix Matrix;
-	typedef ZpVector Vector;
-	typedef Zp Field;
-
-	Field F(p);
-	Matrix A = FieldFill<Matrix,Field>(boundary, M, N, F);
-	ZpVector X(F, A.coldim()), b(F, A.rowdim());
-
-	// Check whether there's a nonzero solution.
-	cout << "here" << endl;
-}
 
 
 template <typename BalancedStorage>
@@ -254,9 +341,9 @@ Set ZpComputePercolationEvents(int field, BoundaryMatrix _boundary, Index breaks
 
 
 Set ComputePercolationEvents(
-		Table addition, Table multiplication, Lookup negation, Lookup inversion,
-		BoundaryMatrix Boundary, Index breaks, int cellCount
-	) {
+	Table addition, Table multiplication, Lookup negation, Lookup inversion,
+	BoundaryMatrix Boundary, Index breaks, int cellCount
+) {
 	Index nextColumnAdded = Index(cellCount, 0);
 	Column cell, youngest;
 	Set marked = Set();
@@ -353,9 +440,9 @@ unop _inv(Lookup inversion) {
 
 
 Set LinearComputePercolationEvents(
-		int field, Lookup addition, Lookup multiplication, Lookup negation, Lookup inversion,
-		BoundaryMatrix Boundary, Index breaks, int cellCount, int dimension
-	) {
+	int field, Lookup addition, Lookup multiplication, Lookup negation, Lookup inversion,
+	BoundaryMatrix Boundary, Index breaks, int cellCount, int dimension
+) {
 	Index nextColumnAdded = Index(cellCount, 0);
 	Column cell, youngest;
 	Set marked = Set();
@@ -439,9 +526,9 @@ Set LinearComputePercolationEvents(
 
 
 Bases LinearComputeBases(
-		int field, Lookup addition, Lookup multiplication, Lookup negation, Lookup inversion,
-		BoundaryMatrix Boundary, Index breaks, int cellCount, int dimension
-	) {
+	int field, Lookup addition, Lookup multiplication, Lookup negation, Lookup inversion,
+	BoundaryMatrix Boundary, Index breaks, int cellCount, int dimension
+) {
 	Index nextColumnAdded = Index(cellCount, 0);
 	Column cell, youngest;
 	Set marked = Set();
@@ -529,9 +616,169 @@ Bases LinearComputeBases(
 
 	for (auto it = marked.begin(); it != marked.end(); it++) {
 		if (nextColumnAdded[*it] == 0) {
+			// Make sure we include *all* the coefficients!
+			reducedColumns[*it][*it] = (DATATYPE)1;
 			bases[dimensions[*it]].push_back(reducedColumns[*it]);
 		}
 	}
 
 	return bases;
+}
+
+
+Set CobasisComputePercolationEvents(
+	BoundaryMatrix boundary, Basis cobasis, int M, int N, int p, int stop
+) {
+	// Construct the finite field and construct the matrix. If we're over Z/2Z,
+	// use specialized matrices for our operations.
+	typedef ZpMatrix Matrix;
+	typedef ZpVector Vector;
+	typedef Zp Field;
+
+	// Construct the field we're over.
+	Field F(p);
+
+	// Construct the coboundary matrix and the vectors.
+	// TODO rewrite this using a LinBox feature?
+	Matrix coboundary = TransposeFillFromBoundaryMatrix<Matrix,Field>(boundary, M, N, F);
+
+	Vector x(F, M);
+	vector<Vector> sparseCobasis = vector<Vector>();
+	for (int e=0; e<cobasis.size(); e++) {
+		sparseCobasis.push_back(VectorFillFromColumn<Vector,Field>(cobasis[e], M, F));
+	}
+
+	// Do a binary search to determine when we've sufficiently percolated. Start
+	// at the time we'd expect to have percolated the correct number of times
+	// (i.e. we've added a critical probability's proportion of cells to the
+	// complex). Keep track of the rank of the image in a map.
+	int rank, left = 0, right = N, t = N*sqrt(p)/(1+sqrt(p));
+	Map ranks = Map();
+
+	// Set the solver method; we'll do sparse elimination for exactness?
+	LinBox::Method::SparseElimination METHOD;
+
+	while (true) {
+		t = left + floor((right-left)/2);
+
+		// Do a "look-around," trying out differently-sized matrices.
+		for (int s=t-1; s<t+1; s++) {
+			// Construct the partial coboundary matrix. Since `boundary` is the
+			// boundary matrix of the appropriate dimension and is reported as a
+			// vector of columns, we can simply load up the first `t` columns into
+			// a sparse array, then take the transpose to get the coboundary matrix
+			// of the right size.
+			LinBox::Submatrix<Matrix> partial(&coboundary, 0, 0, s, coboundary.coldim());
+			rank = cobasis.size();
+
+			// For each of the basis elements, check to see if it's in the image.
+			for (int i=0; i < sparseCobasis.size(); i++) {
+				Vector f(sparseCobasis[i]);
+				f.resize(s);
+
+				try {
+					// Check if f is in the image of the coboundary; if it is,
+					// then we knock the rank (of the image) down by 1. If it's
+					// not, do nothing.
+					solve(x, partial, f, METHOD);
+					rank--;
+				} catch (...) { }
+			}
+			ranks[s] = rank;
+		}
+		// Keep going until we find the spot where we go from rank `stop` to rank
+		// `stop+1`.
+		bool percolated = ranks[t] >= stop;
+		bool atThreshold = ranks[t-1] < ranks[t];
+
+		if (percolated) {
+			// If we've percolated but are above the threshold, we need to go
+			// down. Otherwise, we're done.
+			if (!atThreshold) right = t-1;
+			else break;
+		} else {
+			// If we haven't percolated yet, we need to move forward in the
+			// filtration.
+			left = t+1;
+		}
+	}
+
+	return Set({t-1});
+}
+
+
+Set RankComputePercolationEvents(
+	BoundaryMatrix augmentedCoboundary, int M, int N, int basisrank, int p, int stop
+) {
+	// Construct the finite field and construct the matrix. If we're over Z/2Z,
+	// use specialized matrices for our operations.
+	typedef ZpMatrix Matrix;
+	typedef ZpVector Vector;
+	typedef Zp Field;
+
+	// Construct the field we're over.
+	Field F(p);
+
+	// Construct the fake boundary matrix.
+	Matrix augmented = MatrixFillFromBoundaryMatrix<Matrix,Field>(augmentedCoboundary, M, N, F);
+
+	// Do a binary search to determine when we've sufficiently percolated. Start
+	// at the time we'd expect to have percolated the correct number of times
+	// (i.e. we've added a critical probability's proportion of cells to the
+	// complex). Keep track of the rank of the image in a map.
+	int rank, left = 0, right = M, t = M*sqrt(p)/(1+sqrt(p));
+	Map ranks = Map();
+
+	// Set the solver method; we'll do sparse elimination for exactness?
+	LinBox::Method::SparseElimination METHOD;
+	// METHOD.preconditioner = LinBox::Preconditioner::FullDiagonal;
+
+	for (int s=basisrank+1; s<right; s++) {
+		cout << s << endl;
+
+	// while (true) {
+		// t = left + floor((right-left)/2);
+
+		// for (int s=t-1; s<t+1; s++) {
+			// Get two submatrices: the first gets the whole cobasis plus the first
+			// t rows of the coboundary matrix, and the second just gets the first
+			// t rows of the coboundary matrix. Then we compare the ranks.
+			LinBox::Submatrix<Matrix> with(&augmented, 0, 0, s, augmented.coldim());
+			LinBox::Submatrix<Matrix> alone(&augmented, 0, basisrank, s, augmented.coldim()-basisrank);
+
+			// cout << with.rowdim() << " " << with.coldim() << endl;
+			// cout << alone.rowdim() << " " << alone.coldim() << endl;
+			// printmap(ranks);
+
+			// Compute ranks and mark.
+			size_t rankwith, rankalone;
+			LinBox::rank(rankwith, with, METHOD);
+			LinBox::rank(rankalone, alone, METHOD);
+			ranks[s] = rankwith-rankalone;
+
+			// cout << rankwith << endl;
+			// cout << rankalone << endl;
+		// }
+		// cout << endl;
+
+		
+		// // Keep going until we find the spot where we go from rank `stop` to rank
+		// // `stop+1`.
+		// bool percolated = ranks[t] >= stop;
+		// bool atThreshold = ranks[t-1] < ranks[t];
+
+		// if (percolated) {
+		// 	// If we've percolated but are above the threshold, we need to go
+		// 	// down. Otherwise, we're done.
+		// 	if (!atThreshold) right = t-1;
+		// 	else break;
+		// } else {
+		// 	// If we haven't percolated yet, we need to move forward in the
+		// 	// filtration.
+		// 	left = t+1;
+		// }
+	}
+	printmap(ranks);
+
+	return Set({t-1});
 }

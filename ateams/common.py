@@ -14,13 +14,13 @@ class NumericalInstabilityWarning(UserWarning): pass
 
 
 class Matrices:
-    boundary = None
-    coboundary = None
-    full = None
+	boundary = None
+	coboundary = None
+	full = None
 
 
 class Bunch(dict):
-    def __init__(self, **kwds):
-        self.update(kwds)
-        self.__dict__ = self
+	def __init__(self, **kwds):
+		self.update(kwds)
+		self.__dict__ = self
 
