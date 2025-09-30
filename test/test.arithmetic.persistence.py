@@ -1,17 +1,45 @@
 
 import numpy as np
+from time import time
 
-from ateams.common import MINT
-from ateams.arithmetic import ComputePercolationEvents
 from ateams.complexes import Cubical
+from ateams.arithmetic import Twist
 
-C = Cubical().fromCorners([3,3], field=3)
-_, __, full = C.recomputeBoundaryMatrices(2)
 
-filtration = np.arange(len(C.flattened), dtype=MINT)
-filtration[9] = 10
-filtration[10] = 9
-print(C.flattened)
+def stringify(A, colbreak):
+	M, N = A.shape
+	S = ""
 
-s = ComputePercolationEvents(full, filtration, 1, C.field, C.breaks)
-print(s)
+	for i in range(M):
+		for j in range(N):
+			if j == colbreak-1: S += "| "
+			S += str(A[i,j]) + " "
+		S += "\n"
+
+	return S
+
+
+field = 3
+dimension = 2
+Cubes = Cubical().fromCorners([4,4,4,4])
+boundary, coboundary = Cubes.recomputeBoundaryMatrices(dimension)
+print(Cubes.breaks)
+
+P = Twist(field, Cubes.matrices.full, Cubes.breaks, len(Cubes.flattened), dimension)
+filtration = np.arange(len(Cubes.flattened))
+
+lstart = time()
+ltimes = P.LinearComputePercolationEvents(filtration)
+lstop = time()
+
+right = [t for t in ltimes if Cubes.breaks[dimension] < t < Cubes.breaks[dimension+1]]
+print(lstop-lstart)
+print(right)
+print()
+
+# bstart = time()
+# btimes = P.RankComputePercolationEvents(filtration)
+# bstop = time()
+# print(bstop-bstart)
+# print(btimes)
+

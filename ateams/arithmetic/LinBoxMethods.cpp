@@ -735,6 +735,7 @@ Set RankComputePercolationEvents(
 
 	for (int s=basisrank+1; s<right; s++) {
 		cout << s << endl;
+	}
 
 	// while (true) {
 		// t = left + floor((right-left)/2);
