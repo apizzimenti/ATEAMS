@@ -77,7 +77,7 @@ class Cubical:
 			self.tranches[d] = [self.tranches[d-1][1], self.tranches[d-1][1] + len(self.Boundary[d])]
 
 		# Breaks. (For percolation computation.)
-		self.breaks = np.array(self.tranches[:,0])
+		self.breaks  = np.array(self.tranches[:,0])
 
 		return self
 	

@@ -406,7 +406,6 @@ cdef class Twist:
 				rcombinedT, cobasis.size()+coboundary.size(), rcombinedT.size(),
 				cobasis.size(), self.characteristic, stop, self.__DEBUG
 			);
-
 		
 		events = Set();
 

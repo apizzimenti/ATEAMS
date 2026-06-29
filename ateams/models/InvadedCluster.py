@@ -106,7 +106,7 @@ class InvadedCluster():
 				return np.array(ReducedKernelSample(
 					self.matrices.coboundary, zeros, 2*self.dimension,
 					self.faces, self.field, self._DEBUG
-				), dtype=FINT)
+				), dtype=np.int8)
 			except Exception as e:
 				raise NumericalInstabilityWarning(e)
 	
@@ -176,8 +176,7 @@ class InvadedCluster():
 					# if we exceed the attempts budget, re-sample the filtration and
 					# try again.
 					while len(essential) < self.rank:
-						# Compute essential cycle birth times. If we aren't computing the
-						# 
+						# Compute essential cycle birth times.
 						stop = 0 if self.full else self._STOP
 						essential = Twister.RankComputePercolationEvents(filtration, stop=stop)
 						tries += 1

@@ -21,14 +21,16 @@ def construct(L, dim, field):
 
 
 	# Set up Model and Chain.
-	SW = SwendsenWang(L, dimension=dim//2, field=field, temperature=critical(field), maxTries=8)
+	SW = SwendsenWang(L, dimension=dim//2, field=field, temperature=critical(field), _DEBUG=True)
 	N = 100
 	M = Chain(SW, steps=N)
 
 	return M
 
 def chain(M, DESC=""):
-	for (spins, occupied, satisfied) in M.progress(dynamic_ncols=True, desc=DESC): pass
+	for (spins, occupied, satisfied) in M.progress(dynamic_ncols=True, desc=DESC):
+		# print(spins[M.model.complex.Boundary[2]])
+		pass
 	return M._exitcode
 
 

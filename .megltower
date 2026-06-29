@@ -1,0 +1,5 @@
+REMOTEUSER=apizzime
+REMOTELOCATION=gmu-megltower
+REMOTEHOST=megltower
+REMOTEBUILDACTION=pangolin.env.sh
+REMOTEROOT="~/libraries/"

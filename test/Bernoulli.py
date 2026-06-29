@@ -18,7 +18,7 @@ def construct(L, DIM):
 
 	# Set up Model and Chain.
 	SW = Bernoulli(L, dimension=DIM//2)
-	N = 100
+	N = 1000
 	M = Chain(SW, steps=N)
 
 	return M
@@ -30,6 +30,6 @@ def chain(M, DESC=""):
 	return M._exitcode
 
 if __name__ == "__main__":
-	M = construct(4, 4)
+	M = construct(10,4)
 	chain(M)
 

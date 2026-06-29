@@ -228,6 +228,7 @@ Set LinearComputePercolationEvents(
 					}
 				}
 			}
+			
 			// Check whether we've eliminated the column. For some god damn reason
 			// we have to re-set the entry of the Boundary??? Why?????? Scope??? wtf
 			if (!cell.empty()) {
